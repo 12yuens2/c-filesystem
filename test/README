@@ -1,0 +1,3 @@
+To run the tests execute the follwoing command:
+. test.sh <path to folder containing myfc.c and myfs.h>
+
