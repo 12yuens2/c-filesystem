@@ -46,7 +46,7 @@ typedef struct myinode
 
 typedef struct file_fcb
 {
-	myinode fcb;
+	myinode inode;
 
 	time_t ctime;
 	off_t size;
@@ -63,14 +63,25 @@ typedef struct dir_fcb
 
 } dir_fcb;
 
+
+typedef struct dir_entry 
+{
+	uuid_t inode_id;
+	char filename[MY_MAX_FILE_NAME];
+} dir_entry;
+
+
+
 typedef struct dir_data_fcb
 {
+	//own id
 	uuid_t id;
 
-	char filenames[MY_MAX_DIR_FILES][MY_MAX_FILE_NAME];
-	uuid_t files[MY_MAX_DIR_FILES];
+	dir_entry entries[MY_MAX_DIR_FILES];
+
+	// char filenames[MY_MAX_DIR_FILES][MY_MAX_FILE_NAME];
+	// uuid_t files[MY_MAX_DIR_FILES];
 
 } dir_data_fcb;
-
 
 

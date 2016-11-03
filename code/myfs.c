@@ -38,21 +38,22 @@ static int myfs_getattr(const char *path, struct stat *stbuf)
 	write_log("myfs_getattr(path=\"%s\", statbuf=0x%08x)\n", path, stbuf);
 
 	memset(stbuf, 0, sizeof(struct stat));
-	if(strcmp(path, "/")==0)
+
+
+
+	if (strcmp(path, "/") == 0)
 	{
 		stbuf->st_mode = the_root_fcb.inode.mode;
 		stbuf->st_nlink = 2;
 		stbuf->st_uid = the_root_fcb.inode.uid;
 		stbuf->st_gid = the_root_fcb.inode.gid;
+		
+
 	}
 	else
 	{
-		stbuf->st_mode = the_root_fcb.inode.mode;
-		stbuf->st_nlink = 2;
-		stbuf->st_uid = the_root_fcb.inode.uid;
-		stbuf->st_gid = the_root_fcb.inode.gid;
-		// if (strcmp(path, the_root_fcb.path) == 0)
-		// {
+		if (strcmp(path, the_root_fcb.path) == 0)
+		{
 		// 	// stbuf->st_mode = the_root_fcb.mode;
 		// 	// stbuf->st_nlink = 1;
 		// 	// stbuf->st_mtime = the_root_fcb.mtime;
@@ -60,12 +61,12 @@ static int myfs_getattr(const char *path, struct stat *stbuf)
 		// 	// stbuf->st_size = the_root_fcb.size;
 		// 	// stbuf->st_uid = the_root_fcb.uid;
 		// 	// stbuf->st_gid = the_root_fcb.gid;
-		// }
-		// else
-		// {
-		// 	write_log("myfs_getattr - ENOENT\n");
-		// 	return 0;
-		// }
+		}
+		else
+		{
+			write_log("myfs_getattr - ENOENT\n");
+			return -ENOENT;
+		}
 	}
 
 	return 0;
@@ -98,17 +99,28 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 		dir_data_fcb root_data;
 		unqlite_kv_fetch(pDb, &the_root_fcb.inode.data, KEY_SIZE, &root_data, &nBytes);
 
-		// int i = 0;
-		// while(strcmp(dir_files.filenames[0], "\0")
+		for (int i = 0; i<MY_MAX_DIR_FILES; i++)
+		{
+			char* filename = root_data.entries[i].filename;
+			write_log("filename: %s\n", filename);
+
+			if (strcmp(filename, "") != 0)
+			{
+				filler(buf, root_data.entries[i].filename, NULL, 0);
+			}
+			
+		}
 	}
 
-	char *pathP = (char*)&(the_root_fcb.path);
-	if(*pathP!='\0')
-	{
-		// drop the leading '/';
-		pathP++;
-		filler(buf, pathP, NULL, 0);
-	}
+	// char *pathP = (char*)&(the_root_fcb.path);
+	// if (*pathP != '\0')
+	// {
+	// 	// drop the leading '/';
+	// 	pathP++;
+	// 	filler(buf, pathP, NULL, 0);
+	// }
+
+	write_log("end read.\n");
 
 	return 0;
 }
@@ -391,17 +403,28 @@ int myfs_mkdir(const char *path, mode_t mode)
 
 	write_log("made dir%s\n", path);
 
-	//if is making root dir
-	if (strcmp(path, "/") == 0) {
-		rc = write_root();
-		error_handle(rc);
-	}
 
-	//add to parent 
-	else 
+	//root data
+	dir_data_fcb parent_data;
+	unqlite_int64 nBytes;
+	unqlite_kv_fetch(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, &nBytes);
+
+	//add to parent
+	for (int i = 0; i<MY_MAX_DIR_FILES; i++) 
 	{
+		dir_entry entry = parent_data.entries[i];
 
+		//empty entry
+		if(strcmp(entry.filename, "") == 0)
+		{
+			uuid_copy(entry.inode_id, dir_inode.id);
+			strcpy(entry.filename, "newfile");
+			break;
+		}
 	}
+
+	unqlite_kv_store(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, nBytes);
+
 
 
     return 0;
@@ -497,6 +520,7 @@ void init_fs()
 
 		uuid_t *data_id = &(root_object.id);
 
+		//error checking
 		unqlite_int64 nBytes;  //Data length.
 		rc = unqlite_kv_fetch(pDb, data_id, KEY_SIZE, NULL, &nBytes);
 		error_handle(rc);
@@ -514,7 +538,7 @@ void init_fs()
 	{
 		printf("init_fs: root is empty\n");
 		//Initialise and store an empty root fcb.
-		// memset(&the_root_fcb, 0, sizeof(struct dir_fcb));
+		memset(&the_root_fcb, 0, sizeof(dir_fcb));
 
 		//See 'man 2 stat' and 'man 2 chmod'.
 
@@ -528,18 +552,26 @@ void init_fs()
 
 		//create directory data of root
 		dir_data_fcb dir_data;
+		// memset(&dir_data, 0, sizeof(dir_data_fcb));
+
 		uuid_generate(dir_data.id);
-		memset(&dir_data.filenames, 0, MY_MAX_DIR_FILES * MY_MAX_FILE_NAME);
-		memset(&dir_data.files, 0, MY_MAX_DIR_FILES);
+
+		for (int i = 0; i<MY_MAX_DIR_FILES; i++) 
+		{
+			memset(&dir_data.entries[i], 0, sizeof(dir_entry));
+		}
 
 		uuid_copy(the_root_fcb.inode.data, dir_data.id);
 
+		//write root data to db
+		rc = unqlite_kv_store(pDb, &(dir_data.id), KEY_SIZE, &dir_data, sizeof(dir_data_fcb));
+		error_handle(rc);
 
 		//Generate a key for the_root_fcb and update the root object.
 		uuid_generate(root_object.id);
 
 		printf("init_fs: writing root fcb\n");
-		rc = unqlite_kv_store(pDb, &(root_object.id), KEY_SIZE, &the_root_fcb, sizeof(struct dir_fcb));
+		rc = unqlite_kv_store(pDb, &(root_object.id), KEY_SIZE, &the_root_fcb, sizeof(dir_fcb));
 		error_handle(rc);
 
 		printf("init_fs: writing updated root object\n");
