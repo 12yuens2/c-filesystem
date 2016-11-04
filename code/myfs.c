@@ -29,6 +29,29 @@ void error_handle(int rc)
 	}
 }
 
+/**
+ * 
+ */
+// int fetch_from_store(uuid_t* id, void* memory_address, int size_of_struct)
+// {
+// 	//error checking
+// 	int rc;
+// 	unqlite_int64 nBytes;  //Data length.
+// 	rc = unqlite_kv_fetch(pDb, id, KEY_SIZE, NULL, &nBytes);
+// 	error_handle(rc);
+
+// 	if(nBytes!=sizeof(struct dir_fcb))
+// 	{
+// 		printf("Data object has unexpected size. Doing nothing.\n");
+// 		exit(-1);
+// 	}
+
+// 	//Fetch the fcb that the root object points at. We will probably need it.
+// 	unqlite_kv_fetch(pDb, id, KEY_SIZE, &the_root_fcb, &nBytes);
+
+// 	return nBytes;
+// }
+
 
 
 // Get file and directory attributes (meta-data).
@@ -52,15 +75,52 @@ static int myfs_getattr(const char *path, struct stat *stbuf)
 	}
 	else
 	{
+		// dir_data_fcb dir_data;
+		// int bytes = fetch_from_store(&the_root_fcb.inode.data, &dir_data, sizeof(dir_data_fcb));
+		// while(strlen(path) > 0)
+		// {
+		// 	if(strcmp(path[0], "/") == 0 )
+		// 	{
+		// 		path = path++;
+		// 	}
+
+		// 	char* current_path;
+		// 	int num = strlen(path);
+
+		// 	if(strstr(path, "/") != NULL)
+		// 	{
+		// 		num = strstr(path, "/") - path;
+		// 		strncpy(current_path, path, num);
+		// 	}
+		// 	else 
+		// 	{
+		// 		current_path = path;
+		// 	}
+
+		// 	for(int i = 0; i<MY_MAX_DIR_FILES; i++)
+		// 	{
+		// 		dir_entry entry = dir_data.entries[i];
+		// 		if (strcmp(entry.filename, current_path) == 0)
+		// 		{
+		// 			bytes = fetch_from_store(&entry.inode_id, &dir_data, sizeof(dir_data_fcb));
+		// 			path += num;
+		// 		}
+		// 	}
+		// }
+		// if ()
+
+
+
+
 		if (strcmp(path, the_root_fcb.path) == 0)
 		{
-		// 	// stbuf->st_mode = the_root_fcb.mode;
-		// 	// stbuf->st_nlink = 1;
-		// 	// stbuf->st_mtime = the_root_fcb.mtime;
-		// 	// stbuf->st_ctime = the_root_fcb.ctime;
-		// 	// stbuf->st_size = the_root_fcb.size;
-		// 	// stbuf->st_uid = the_root_fcb.uid;
-		// 	// stbuf->st_gid = the_root_fcb.gid;
+			// stbuf->st_mode = the_root_fcb.mode;
+			// stbuf->st_nlink = 1;
+			// stbuf->st_mtime = the_root_fcb.mtime;
+			// stbuf->st_ctime = the_root_fcb.ctime;
+			// stbuf->st_size = the_root_fcb.size;
+			// stbuf->st_uid = the_root_fcb.uid;
+			// stbuf->st_gid = the_root_fcb.gid;
 		}
 		else
 		{
@@ -398,7 +458,12 @@ int myfs_mkdir(const char *path, mode_t mode)
 	
 	uuid_copy(dir_inode.data, dir_data.id);
 
+	//store directory fcb
 	int rc = unqlite_kv_store(pDb, &(dir_inode.id), KEY_SIZE, &new_dir, DIR_FCB_SIZE);
+	error_handle(rc);
+
+	//store directory data
+	rc = unqlite_kv_store(pDb, &(dir_data.id), KEY_SIZE, &dir_data, DIR_DATA_SIZE);
 	error_handle(rc);
 
 	write_log("made dir%s\n", path);
@@ -408,6 +473,9 @@ int myfs_mkdir(const char *path, mode_t mode)
 	dir_data_fcb parent_data;
 	unqlite_int64 nBytes;
 	unqlite_kv_fetch(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, &nBytes);
+
+
+	char* name;
 
 	//add to parent
 	for (int i = 0; i<MY_MAX_DIR_FILES; i++) 
@@ -419,12 +487,17 @@ int myfs_mkdir(const char *path, mode_t mode)
 		{
 			uuid_copy(entry.inode_id, dir_inode.id);
 			strcpy(entry.filename, "newfile");
+		
+			write_log("making new dir %s\n", entry.filename);
+			name = parent_data.entries[i].filename;
 			break;
 		}
 	}
 
-	unqlite_kv_store(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, nBytes);
+	rc = unqlite_kv_store(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, nBytes);
+	error_handle(rc);
 
+	write_log("wrote back tos tre %s\n", name);
 
 
     return 0;
