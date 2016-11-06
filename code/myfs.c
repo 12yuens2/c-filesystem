@@ -21,6 +21,15 @@
 //fcb of root directiory
 struct dir_fcb the_root_fcb;
 
+char UUID_BUF[100];
+
+char* get_uuid(uuid_t uuid)
+{
+	uuid_unparse(uuid, UUID_BUF);
+	return UUID_BUF;
+}
+
+
 void error_handle(int rc) 
 {
 	if(rc != UNQLITE_OK)
@@ -29,28 +38,50 @@ void error_handle(int rc)
 	}
 }
 
+
+char* get_file_name(char* path)
+{
+	char* pathP = path;
+	if (*pathP != '\0')
+	{
+		// drop the leading '/';
+		pathP++;
+	}
+	write_log("path: %s strchr: %s\n", path, strrchr(path, '/'));
+	return pathP;
+}
+
+
 /**
  * 
  */
-// int fetch_from_store(uuid_t* id, void* memory_address, int size_of_struct)
-// {
-// 	//error checking
-// 	int rc;
-// 	unqlite_int64 nBytes;  //Data length.
-// 	rc = unqlite_kv_fetch(pDb, id, KEY_SIZE, NULL, &nBytes);
-// 	error_handle(rc);
+int fetch_from_db(uuid_t id, void* memory_address, int size)
+{
+	//error checking
+	int rc;
+	unqlite_int64 nBytes = size;  //Data length.
+	rc = unqlite_kv_fetch(pDb, id, KEY_SIZE, NULL, &nBytes);
+	error_handle(rc);
+	// write_log("nbyets: %d | fcb: %d\n", nBytes, size);
 
-// 	if(nBytes!=sizeof(struct dir_fcb))
-// 	{
-// 		printf("Data object has unexpected size. Doing nothing.\n");
-// 		exit(-1);
-// 	}
+	//error check we fetched the right thing
+	if(nBytes!=size)
+	{
+		write_log("Data object has unexpected size. Doing nothing.\n");
+		exit(-1);
+	}
 
-// 	//Fetch the fcb that the root object points at. We will probably need it.
-// 	unqlite_kv_fetch(pDb, id, KEY_SIZE, &the_root_fcb, &nBytes);
+	//Fetch the fcb that the root object points at. We will probably need it.
+	unqlite_kv_fetch(pDb, id, KEY_SIZE, memory_address, &nBytes);
 
-// 	return nBytes;
-// }
+	return nBytes;
+}
+
+int store_to_db(uuid_t id, void* memory_address, int size)
+{
+	int rc = unqlite_kv_store(pDb, id, KEY_SIZE, memory_address, size);
+	error_handle(rc);
+}
 
 
 
@@ -63,64 +94,48 @@ static int myfs_getattr(const char *path, struct stat *stbuf)
 	memset(stbuf, 0, sizeof(struct stat));
 
 
-
+	//is root
 	if (strcmp(path, "/") == 0)
 	{
 		stbuf->st_mode = the_root_fcb.inode.mode;
 		stbuf->st_nlink = 2;
 		stbuf->st_uid = the_root_fcb.inode.uid;
 		stbuf->st_gid = the_root_fcb.inode.gid;
-		
-
 	}
 	else
 	{
-		// dir_data_fcb dir_data;
-		// int bytes = fetch_from_store(&the_root_fcb.inode.data, &dir_data, sizeof(dir_data_fcb));
-		// while(strlen(path) > 0)
-		// {
-		// 	if(strcmp(path[0], "/") == 0 )
-		// 	{
-		// 		path = path++;
-		// 	}
-
-		// 	char* current_path;
-		// 	int num = strlen(path);
-
-		// 	if(strstr(path, "/") != NULL)
-		// 	{
-		// 		num = strstr(path, "/") - path;
-		// 		strncpy(current_path, path, num);
-		// 	}
-		// 	else 
-		// 	{
-		// 		current_path = path;
-		// 	}
-
-		// 	for(int i = 0; i<MY_MAX_DIR_FILES; i++)
-		// 	{
-		// 		dir_entry entry = dir_data.entries[i];
-		// 		if (strcmp(entry.filename, current_path) == 0)
-		// 		{
-		// 			bytes = fetch_from_store(&entry.inode_id, &dir_data, sizeof(dir_data_fcb));
-		// 			path += num;
-		// 		}
-		// 	}
-		// }
-		// if ()
-
-
-
-
-		if (strcmp(path, the_root_fcb.path) == 0)
+		dir_data_fcb root_data;
+		int bytes = fetch_from_db(the_root_fcb.inode.data, &root_data, sizeof(dir_data_fcb));
+		int found = 0;
+		if (strstr(path, "/") != NULL)
 		{
-			// stbuf->st_mode = the_root_fcb.mode;
+			for(int i = 0; i<MY_MAX_DIR_FILES; i++)
+			{
+				dir_entry entry = root_data.entries[i];
+				if (strcmp(entry.filename, get_file_name(path)) == 0)
+				{
+					found = 1;
+					dir_fcb dir;
+					fetch_from_db(entry.inode_id, &dir, sizeof(dir_fcb));
+
+					stbuf->st_mode = dir.inode.mode;
+					stbuf->st_nlink = 1;
+					stbuf->st_mtime = dir.inode.mtime;
+					stbuf->st_uid = dir.inode.uid;
+					stbuf->st_gid = dir.inode.gid;
+
+				}
+			}
+			if (found == 0)
+			{
+				return -ENOENT;
+			}
+			// write_log("myfs_getattr - strcmp '/' \n");	
+			// stbuf->st_mode = the_root_fcb.inode.mode;
 			// stbuf->st_nlink = 1;
-			// stbuf->st_mtime = the_root_fcb.mtime;
-			// stbuf->st_ctime = the_root_fcb.ctime;
-			// stbuf->st_size = the_root_fcb.size;
-			// stbuf->st_uid = the_root_fcb.uid;
-			// stbuf->st_gid = the_root_fcb.gid;
+			// stbuf->st_mtime = the_root_fcb.inode.mtime;
+			// stbuf->st_uid = the_root_fcb.inode.uid;
+			// stbuf->st_gid = the_root_fcb.inode.gid;
 		}
 		else
 		{
@@ -128,7 +143,6 @@ static int myfs_getattr(const char *path, struct stat *stbuf)
 			return -ENOENT;
 		}
 	}
-
 	return 0;
 }
 
@@ -141,30 +155,22 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 
 	write_log("write_readdir(path=\"%s\", buf=0x%08x, filler=0x%08x, offset=%lld, fi=0x%08x)\n", path, buf, filler, offset, fi);
 
-	// This implementation supports only a root directory so return an error if the path is not '/'.
-	// if (strcmp(path, "/") != 0)
-	// {
-	// 	write_log("myfs_readdir - ENOENT");
-	// 	return -ENOENT;
-	// }
-
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
-
 
 	//path is root
 	if (strcmp(path, "/") == 0)
 	{
 		unqlite_int64 nBytes;
 		dir_data_fcb root_data;
-		unqlite_kv_fetch(pDb, &the_root_fcb.inode.data, KEY_SIZE, &root_data, &nBytes);
+		unqlite_kv_fetch(pDb, the_root_fcb.inode.data, KEY_SIZE, &root_data, &nBytes);
 
 		for (int i = 0; i<MY_MAX_DIR_FILES; i++)
 		{
 			char* filename = root_data.entries[i].filename;
-			write_log("filename: %s\n", filename);
+			// write_log("filename: %s\n", filename);
 
-			if (strcmp(filename, "") != 0)
+			if (strcmp(filename, get_file_name(path)) != 0)
 			{
 				filler(buf, root_data.entries[i].filename, NULL, 0);
 			}
@@ -440,6 +446,7 @@ int myfs_mkdir(const char *path, mode_t mode)
 {
 	write_log("myfs_mkdir: %s\n",path);
 
+	write_log("fname; %s\n", get_file_name(path));
 
 	//make directory fcb
 	dir_fcb new_dir;
@@ -447,10 +454,10 @@ int myfs_mkdir(const char *path, mode_t mode)
 
 	uuid_generate(dir_inode.id);
 
-	dir_inode.mode = mode;
+	dir_inode.mode = mode | S_IFDIR;//S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH;;
 	dir_inode.uid = getuid();
 	dir_inode.gid = getgid();
-	dir_inode.mtime = time(0);
+	dir_inode.mtime = time(NULL);
 
 	//make directory data fcb
 	dir_data_fcb dir_data;
@@ -459,21 +466,27 @@ int myfs_mkdir(const char *path, mode_t mode)
 	uuid_copy(dir_inode.data, dir_data.id);
 
 	//store directory fcb
-	int rc = unqlite_kv_store(pDb, &(dir_inode.id), KEY_SIZE, &new_dir, DIR_FCB_SIZE);
+	new_dir.inode = dir_inode;
+	int rc = unqlite_kv_store(pDb, dir_inode.id, KEY_SIZE, &new_dir, DIR_FCB_SIZE);
 	error_handle(rc);
 
 	//store directory data
-	rc = unqlite_kv_store(pDb, &(dir_data.id), KEY_SIZE, &dir_data, DIR_DATA_SIZE);
+	rc = unqlite_kv_store(pDb, dir_data.id, KEY_SIZE, &dir_data, DIR_DATA_SIZE);
 	error_handle(rc);
 
 	write_log("made dir%s\n", path);
 
 
+	// unqlite_int64 bytes;
+	// unqlite_kv_fetch(pDb, the_root_fcb.inode.data, KEY_SIZE, NULL, &bytes);
+	// write_log("got root_data of size %d from %s\n", bytes, get_uuid(the_root_fcb.inode.data));
+
+
 	//root data
 	dir_data_fcb parent_data;
-	unqlite_int64 nBytes;
-	unqlite_kv_fetch(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, &nBytes);
-
+	// unqlite_int64 nBytes = sizeof(dir_data_fcb);
+	// int bytes = unqlite_kv_fetch(pDb, the_root_fcb.inode.data, KEY_SIZE, &parent_data, &nBytes);
+	int bytes = fetch_from_db(the_root_fcb.inode.data, &parent_data, sizeof(dir_data_fcb));
 
 	char* name;
 
@@ -486,19 +499,20 @@ int myfs_mkdir(const char *path, mode_t mode)
 		if(strcmp(entry.filename, "") == 0)
 		{
 			uuid_copy(entry.inode_id, dir_inode.id);
-			strcpy(entry.filename, "newfile");
+			strcpy(entry.filename, get_file_name(path));
 		
 			write_log("making new dir %s\n", entry.filename);
-			name = parent_data.entries[i].filename;
+			name = entry.filename;
+
+			parent_data.entries[i] = entry;
 			break;
 		}
 	}
 
-	rc = unqlite_kv_store(pDb, &(the_root_fcb.inode.data), KEY_SIZE, &parent_data, nBytes);
+	store_to_db(the_root_fcb.inode.data, &parent_data, sizeof(dir_data_fcb));
+	// rc = unqlite_kv_store(pDb, the_root_fcb.inode.data, KEY_SIZE, &parent_data, nBytes);
+
 	error_handle(rc);
-
-	write_log("wrote back tos tre %s\n", name);
-
 
     return 0;
 }
@@ -591,21 +605,19 @@ void init_fs()
 	{
 		printf("init_fs: root is not empty\n");
 
-		uuid_t *data_id = &(root_object.id);
-
 		//error checking
 		unqlite_int64 nBytes;  //Data length.
-		rc = unqlite_kv_fetch(pDb, data_id, KEY_SIZE, NULL, &nBytes);
+		rc = unqlite_kv_fetch(pDb, root_object.id, KEY_SIZE, NULL, &nBytes);
 		error_handle(rc);
 
-		if(nBytes!=sizeof(struct dir_fcb))
+		if(nBytes!=sizeof(dir_fcb))
 		{
 			printf("Data object has unexpected size. Doing nothing.\n");
 			exit(-1);
 		}
 
 		//Fetch the fcb that the root object points at. We will probably need it.
-		unqlite_kv_fetch(pDb, data_id, KEY_SIZE, &the_root_fcb, &nBytes);
+		unqlite_kv_fetch(pDb, root_object.id, KEY_SIZE, &the_root_fcb, &nBytes);
 	}
 	else
 	{
@@ -637,15 +649,25 @@ void init_fs()
 		uuid_copy(the_root_fcb.inode.data, dir_data.id);
 
 		//write root data to db
-		rc = unqlite_kv_store(pDb, &(dir_data.id), KEY_SIZE, &dir_data, sizeof(dir_data_fcb));
+		rc = unqlite_kv_store(pDb, the_root_fcb.inode.data, KEY_SIZE, &dir_data, sizeof(dir_data_fcb));
 		error_handle(rc);
+
+		dir_data_fcb* data;
+		unqlite_int64 bytes;
+		unqlite_kv_fetch(pDb, the_root_fcb.inode.data, KEY_SIZE, data, &bytes);
+		printf("wrote root_data with id %s and size: %d\n", get_uuid(the_root_fcb.inode.data), bytes);
 
 		//Generate a key for the_root_fcb and update the root object.
 		uuid_generate(root_object.id);
 
 		printf("init_fs: writing root fcb\n");
-		rc = unqlite_kv_store(pDb, &(root_object.id), KEY_SIZE, &the_root_fcb, sizeof(dir_fcb));
+		//write root fcb to db
+		rc = unqlite_kv_store(pDb, root_object.id, KEY_SIZE, &the_root_fcb, sizeof(dir_fcb));
 		error_handle(rc);
+
+		unqlite_kv_fetch(pDb, root_object.id, KEY_SIZE, NULL, &bytes);
+
+		printf("wrote root fcb of size %d\n", bytes);
 
 		printf("init_fs: writing updated root object\n");
 		//Store root object
