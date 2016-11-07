@@ -29,39 +29,33 @@
 // 	time_t root_mtime;	/* time of last modification */
 // };
 
-typedef struct myinode
+
+//treat files and directories as the same thing (an inode)
+typedef struct my_inode
 {
 	uuid_t id;
 
-	//data block if file, dir_data if directory
-	uuid_t data;
+	//data block if file, dir_data_fcb if directory
+	uuid_t data_id;
 
 	uid_t uid;
 	gid_t gid;
 	mode_t mode;
-	time_t mtime;
-
-
-} myinode;
-
-typedef struct file_fcb
-{
-	myinode inode;
-
+	time_t mtime;	
 	time_t ctime;
 	off_t size;
 
-} file_fcb;
+
+} my_inode;
 
 
+// typedef struct dir_fcb
+// {
+// 	myinode inode;
 
-typedef struct dir_fcb
-{
-	myinode inode;
+// 	char path[MY_MAX_PATH];//?
 
-	char path[MY_MAX_PATH];//?
-
-} dir_fcb;
+// } dir_fcb;
 
 
 typedef struct dir_entry 
@@ -69,7 +63,6 @@ typedef struct dir_entry
 	uuid_t inode_id;
 	char filename[MY_MAX_FILE_NAME];
 } dir_entry;
-
 
 
 typedef struct dir_data_fcb
