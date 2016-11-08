@@ -1,196 +1,61 @@
-myfs_getattr(path="/", statbuf=0xb09acbe0)
-myfs_getattr(path="/.Trash", statbuf=0xab7fdc10)
+myfs_getattr(path="/", statbuf=0xb9edbbe0)
+myfs_getattr(path="/.Trash", statbuf=0xb9edbc10)
 get_inode for path '/.Trash'
 not found in fs
-myfs_getattr(path="/.Trash-18238", statbuf=0xabffec10)
+myfs_getattr(path="/.Trash-18238", statbuf=0xb96dac10)
 get_inode for path '/.Trash-18238'
 not found in fs
-myfs_getattr(path="/.Trash", statbuf=0xb09acc10)
+myfs_getattr(path="/.Trash", statbuf=0xb9edbc10)
 get_inode for path '/.Trash'
 not found in fs
-myfs_getattr(path="/.Trash-18238", statbuf=0xab7fdc10)
+myfs_getattr(path="/.Trash-18238", statbuf=0xb96dac10)
 get_inode for path '/.Trash-18238'
 not found in fs
-myfs_getattr(path="/", statbuf=0xabffebe0)
-myfs_getattr(path="/a", statbuf=0xb09acc10)
+myfs_getattr(path="/", statbuf=0xb9edbbe0)
+myfs_getattr(path="/a", statbuf=0xb96dac10)
 get_inode for path '/a'
 not found in fs
-myfs_mkdir: /a
-fname; a
-made dir/a
+myfs_create(path="/a", mode=0100644, fi=0xb9edbcc0)
 get_inode for path '/a'
-making new dir a
-myfs_getattr(path="/a", statbuf=0xab7fdc10)
+making new inode a
+myfs_getattr(path="/a", statbuf=0xb9edbbd0)
 get_inode for path '/a'
 FOUND
-myfs_getattr(path="/", statbuf=0xb09acbe0)
-write_readdir(path="/", buf=0xa4000990, filler=0xb14a1c00, offset=0, fi=0xab7fdc00)
+myfs_write(path="/a", buf=0xbafdd060, size=12, offset=0, fi=0xb96dad30)
+get_inode for path '/a'
+FOUND
+myfs_open(path"/a", fi=0xb96dacc0)
+myfs_getattr(path="/a", statbuf=0xb9edbbe0)
+get_inode for path '/a'
+FOUND
+myfs_read(path="/a", buf=0xac000ce0, size=4096, offset=0, fi=0xb96dacc0)
+get_inode for path '/a'
+FOUND
+myfs_getattr(path="/a", statbuf=0xb9edbbe0)
+get_inode for path '/a'
+FOUND
+myfs_getattr(path="/", statbuf=0xb96dabe0)
+write_readdir(path="/", buf=0xb4000b00, filler=0xba9d0c00, offset=0, fi=0xb9edbc00)
 get_inode for path '/'
-filename: a
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
 end read.
-myfs_getattr(path="/", statbuf=0xab7fdbe0)
-myfs_getattr(path="/a", statbuf=0xabffec10)
+myfs_getattr(path="/a", statbuf=0xb96dac10)
 get_inode for path '/a'
 FOUND
-myfs_getattr(path="/a/b", statbuf=0xb09acc10)
-get_inode for path '/a/b'
-FOUND
+myfs_getattr(path="/b", statbuf=0xb9edbc10)
+get_inode for path '/b'
 not found in fs
-myfs_mkdir: /a/b
+myfs_mkdir: /b
 fname; b
-made dir/a/b
-get_inode for path '/a/b'
+made dir/b
+get_inode for path '/b'
+making new inode b
+myfs_getattr(path="/b", statbuf=0xb96dac10)
+get_inode for path '/b'
 FOUND
-making new dir b
-myfs_getattr(path="/a/b", statbuf=0xab7fdc10)
-get_inode for path '/a/b'
-FOUND
-FOUND
-myfs_getattr(path="/a", statbuf=0xb09acbe0)
-get_inode for path '/a'
-FOUND
-write_readdir(path="/a", buf=0xa4000990, filler=0xb14a1c00, offset=0, fi=0xab7fdc00)
-get_inode for path '/a'
-FOUND
-filename: b
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: çi
-end read.
-myfs_getattr(path="/", statbuf=0xab7fdbe0)
-myfs_getattr(path="/a", statbuf=0xabffec10)
-get_inode for path '/a'
-FOUND
-write_readdir(path="/", buf=0xac000cc0, filler=0xb14a1c00, offset=0, fi=0xab7fdc00)
+myfs_getattr(path="/", statbuf=0xb96dabe0)
+write_readdir(path="/", buf=0xb4000b00, filler=0xba9d0c00, offset=0, fi=0xb9edbc00)
 get_inode for path '/'
-filename: a
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
 end read.
-myfs_getattr(path="/a", statbuf=0xab7fdc10)
+myfs_getattr(path="/a", statbuf=0xb96dac10)
 get_inode for path '/a'
 FOUND
-write_readdir(path="/a", buf=0xa4000990, filler=0xb14a1c00, offset=0, fi=0xb09acc00)
-get_inode for path '/a'
-FOUND
-filename: b
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: 
-filename: çi
-end read.
