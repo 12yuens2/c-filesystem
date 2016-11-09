@@ -64,7 +64,7 @@ int fetch_from_db(uuid_t id, void* memory_address, size_t size)
 		write_log("not found in db\n");
 		return -1;
 	}
-	error_handle(rc);
+	// error_handle(rc);
 	// write_log("nbyets: %d | fcb: %d\n", nBytes, size);
 
 	//error check we fetched the right thing
@@ -92,7 +92,7 @@ int store_to_db(uuid_t id, void* memory_address, size_t size)
  * 
  * Returns NULL if path not found.
  */
-my_inode* get_inode(const char* path, int get_parent)
+int get_inode(const char* path, int get_parent, my_inode* inode_buf)
 {
 
 	write_log("get_inode for path '%s'\n", path);
@@ -106,24 +106,24 @@ my_inode* get_inode(const char* path, int get_parent)
 	}
 
 	char* partial_path;
-	my_inode* current_inode = malloc(sizeof(my_inode));
+	my_inode current_inode;
 
 	while((partial_path = strsep(&str, "/")) != NULL)
 	{
 		//root directory
 		if (strcmp(partial_path, "") == 0)
 		{
-			current_inode = memcpy(current_inode, &the_root_fcb, sizeof(my_inode));
+			current_inode = the_root_fcb;
 		} 
 		else 
 		{
 			dir_data_fcb dir_fcb;
-			int rc = fetch_from_db(current_inode->data_id, &dir_fcb, sizeof(dir_data_fcb)); //FIX NEED TO FAIL IF NOT DIRECTORY MEANINGFUL ERROR
+			int rc = fetch_from_db(current_inode.data_id, &dir_fcb, sizeof(dir_data_fcb)); //FIX NEED TO FAIL IF NOT DIRECTORY MEANINGFUL ERROR
 
 			if (rc < 0)
 			{
-				// write_log("not found in db\n");
-				return NULL;
+				write_log("not found in db\n");
+				return -ENOENT;
 			}
 
 			//loop through current inode
@@ -137,19 +137,21 @@ my_inode* get_inode(const char* path, int get_parent)
 					found = 1;
 					write_log("FOUND\n");
 
-					fetch_from_db(entry.inode_id, current_inode, sizeof(my_inode));
+					fetch_from_db(entry.inode_id, &current_inode, sizeof(my_inode));
+
+					break;
 				}
 			}
 
-			if(!found)
+			if (!found)
 			{
 				write_log("not found in fs\n");
-				return NULL;
+				return -ENOENT;
 			}
 		}
 	}
-
-	return current_inode;
+	memcpy(inode_buf, &current_inode, sizeof(my_inode));
+	return 0;
 }
 
 void update_parent(my_inode* parent_fcb, uuid_t new_inode_id, const char* path)
@@ -205,11 +207,14 @@ static int myfs_getattr(const char *path, struct stat *stbuf)
 		if (strstr(path, "/") != NULL)
 		{
 			//loop through directory files starting from the root
-			my_inode* inode = get_inode(path, 0);
+			my_inode* inode;
 
-			if (inode == NULL)
+			int rc = get_inode(path, 0, inode);
+
+			if (rc < 0)
 			{
-				return -ENOENT;
+				write_log("myfs_getattr - ENOENT\n");
+				return rc;
 			}
 			else 
 			{
@@ -246,9 +251,10 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 	// if (strstr(path, "/") == 0)
 	// {
 	unqlite_int64 nBytes;
-	my_inode* inode = get_inode(path, 0);
+	my_inode* inode;
+	int rc = get_inode(path, 0, inode);
 
-	if(inode == NULL)
+	if(rc < 0)
 	{
 		write_log("returned readdir without checking dir contents\n");
 		return 0;
@@ -296,11 +302,12 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	write_log("myfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n", path, buf, size, offset, fi);
 
 
-	my_inode* inode = get_inode(path, 0);
+	my_inode* inode;
+	int rc = get_inode(path, 0, inode);
 
-	if (inode == NULL)
+	if (rc < 0)
 	{
-		return -ENOENT;
+		return rc;
 	}
 	else 
 	{
@@ -394,8 +401,10 @@ static int myfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     	return -ENAMETOOLONG;
     }
 
-    my_inode* parent_fcb = get_inode(path, 1);
-    if (parent_fcb == NULL)
+    my_inode* parent_fcb;
+    int rc = get_inode(path, 1, parent_fcb);
+
+    if (rc < 0)
     {
     	parent_fcb = &the_root_fcb;
     }
@@ -455,11 +464,12 @@ static int myfs_utime(const char *path, struct utimbuf *ubuf)
     write_log("myfs_utime(path=\"%s\", ubuf=0x%08x)\n", path, ubuf);
 
 
-    my_inode* inode = get_inode(path, 0);
+    my_inode* inode;
+    int rc = get_inode(path, 0, inode);
 
-    if (inode == NULL)
+    if (rc < 0)
     {
-    	return -ENOENT;
+    	return rc;
     }
     else 
     {
@@ -502,13 +512,12 @@ static int myfs_write(const char *path, const char *buf, size_t size, off_t offs
 {
     write_log("myfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n", path, buf, size, offset, fi);
 
-    // return -ENOENT;
+    my_inode* inode;
+    int rc = get_inode(path, 0, inode);
 
-    my_inode* inode = get_inode(path, 0);
-
-    if (inode == NULL)
+    if (rc < 0)
     {
-    	return -ENOENT;
+    	return rc;
     }
     else 
     {
@@ -698,9 +707,10 @@ int myfs_mkdir(const char *path, mode_t mode)
 
 
 	//update parent
-	my_inode* parent_fcb = get_inode(path, 1);
+	my_inode* parent_fcb;
+	rc = get_inode(path, 1, parent_fcb);
 
-	if (parent_fcb == NULL)
+	if (rc < 0)
 	{
 		parent_fcb = &the_root_fcb;
 	}
