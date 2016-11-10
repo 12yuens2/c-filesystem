@@ -110,6 +110,7 @@ my_inode* get_inode(const char* path, int get_parent)
 
 	while((partial_path = strsep(&str, "/")) != NULL)
 	{
+		write_log("looping\n");
 		//root directory
 		if (strcmp(partial_path, "") == 0)
 		{
@@ -286,6 +287,56 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 	return 0;
 }
 
+//assuming id given points to a data_block in the db
+//data_offset is an int between 0 and MY_MAX_DATA_SIZE-1
+//size is the amount to read, between 1 and MY_MAX_DATA_SIZE
+int read_data_block(uuid_t id, char** buf, int data_offset, int size)
+{
+	data_block block;
+	fetch_from_db(id, &block, sizeof(data_block));
+
+	memcpy(*buf, &(block.data[data_offset]), size);
+	write_log("wrote to buf: %s with size : %d\n", *buf, size);
+	*buf += size;
+
+	return size;
+}
+
+//id of the direct block
+//block_offset which block to start from from 0 to MY_MAX_DIRECT_BLOCKS
+//data_offset which byte of block to start from
+int read_direct_block(uuid_t id, char** buf, int block_offset, int data_offset, int size)
+{
+	direct_block block;
+	fetch_from_db(id, &block, sizeof(direct_block));
+
+	int read = size;
+	int i = block_offset;
+
+	//read with offset
+	read -= read_data_block(block.blocks[i], buf, data_offset, FLOOR(read, MY_MAX_DATA_SIZE));
+	i++;
+
+	//subsequent reads have no offset
+	while (read > 0 && i < MY_MAX_DIRECT_BLOCKS)
+	{
+		read -= read_data_block(block.blocks[i], buf, 0, FLOOR(read, MY_MAX_DATA_SIZE));
+		i++;
+	}
+
+	if (read > 0)
+	{
+		//read only part of size
+		return size - read;
+	}
+	else 
+	{
+		//read all of size
+		return size;
+	}
+
+}
+
 // Read a file.
 // Read 'man 2 read'.
 static int myfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
@@ -305,30 +356,82 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	else 
 	{
 		len = inode->size;
-		uint8_t data_block[MY_MAX_FILE_SIZE];
-		memset(&data_block, 0, MY_MAX_FILE_SIZE);
+		int read = size;
 
-		//there is a data block
-		if (uuid_compare(zero_uuid, inode->data_id) != 0)
-		{
-			fetch_from_db(inode->data_id, &data_block, MY_MAX_FILE_SIZE);
-		}
+		char** read_buf = &buf;
 
+		file_data_fcb data_fcb;
+		fetch_from_db(inode->data_id, &data_fcb, sizeof(file_data_fcb));
+
+		//go straight to indirect blocks
 		if (offset < len)
 		{
-			if (offset + size > len)
+			if (offset > MY_DATA_SIZE_PER_BLOCK)
 			{
-				size = len - offset;
+				//start from indirect blocks
 			}
+			else 
+			{
+				//start from direct blocks
+				int block_index = offset / MY_MAX_DATA_SIZE;
+				int data_index = offset % MY_MAX_DATA_SIZE;
 
-			memcpy(buf, &data_block + offset, size);
+				//read direct block
+				read -= read_direct_block(data_fcb.direct_data_id, read_buf, block_index, data_index, size);
+
+				write_log("finished direct block, %d left\n", read);
+
+				//read indirect blocks
+				// int i = 0;
+				// while (read > 0 && i < MY_MAX_DIRECT_BLOCKS)
+				// {
+				// 	read -= read_direct_block(data_fcb.index_ids[i], buf, 0, 0, size - read);
+				// }
+
+			}
 		}
-		else
+		else 
 		{
 			size = 0;
 		}
+
 		return size;
+
+		//just access the direct blocks
+		// else 
+		// {
+		// 	direct_block block;
+		// 	fetch_from_db(data.direct_data_id, &block, sizeof(direct_block));
+
+
+		// }
+
+
+		// uint8_t data_block[MY_MAX_FILE_SIZE];
+		// memset(&data_block, 0, MY_MAX_FILE_SIZE);
+
+		// //there is a data block
+		// if (uuid_compare(zero_uuid, inode->data_id) != 0)
+		// {
+		// 	fetch_from_db(inode->data_id, &data_block, MY_MAX_FILE_SIZE);
+		// }
+
+		// if (offset < len)
+		// {
+		// 	if (offset + size > len)
+		// 	{
+		// 		size = len - offset;
+		// 	}
+
+		// 	memcpy(buf, &data_block + offset, size);
+		// }
+		// else
+		// {
+		// 	size = 0;
+		// }
+		// return size;
 	}
+}
 
 	// if(strcmp(path, the_root_fcb.path) != 0)
 	// {
@@ -379,7 +482,7 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	// }
 
 	// return size;
-}
+
 
 // This file system only supports one file. Create should fail if a file has been created. Path must be '/<something>'.
 // Read 'man 2 creat'.
@@ -498,11 +601,83 @@ static int myfs_utime(const char *path, struct utimbuf *ubuf)
 
 // Write to a file.
 // Read 'man 2 write'
+
+//assume buf_ptr passed here is <= MY_MAX_DATA_SIZE * MY_MAX_DIRECT_BLOCKS
+int write_to_direct_block(char** buf_ptr, direct_block* block_buf)
+{
+	int written = 0;
+
+	for (int i = 0; i<MY_MAX_DIRECT_BLOCKS; i++)
+	{
+
+		data_block block;
+
+		uint8_t data[MY_MAX_DATA_SIZE];
+		memset(&data, 0, MY_MAX_DATA_SIZE);
+
+		//do checking
+
+		uuid_generate(block.id);
+
+		
+
+		int wrote = snprintf(data, MY_MAX_DATA_SIZE+1, *buf_ptr);
+
+		write_log("buffer: %s , check: %s\n", *buf_ptr, data);
+
+		//still have leftover to write
+		if (wrote > MY_MAX_DATA_SIZE)
+		{
+			written += MY_MAX_DATA_SIZE;
+			memcpy(&(block.data), &data, MY_MAX_DATA_SIZE);
+			block.size = MY_MAX_DATA_SIZE;
+
+			// char* check = malloc(4);
+			// memcpy(&check, &data, MY_MAX_DATA_SIZE);
+
+			//move data pointer along to next bytes
+			*buf_ptr += MY_MAX_DATA_SIZE;
+		}
+		else 
+		{
+			written += wrote;
+			memcpy(&(block.data), &data, wrote);
+			block.size = wrote;
+		}
+
+		// written += MY_MAX_DATA_SIZE;
+
+		store_to_db(block.id, &block, sizeof(data_block));
+		uuid_copy(block_buf->blocks[i], block.id);
+
+		if (wrote <= MY_MAX_DATA_SIZE)
+		{
+			// write_log("finished write mid way\n");
+			*buf_ptr += wrote;
+			return written;
+		}
+		
+		// write_log("writing next part file %d\n", i);
+	}
+
+	return written;
+}
+
+int write_to_block(char** buf_ptr, uuid_t* id)
+{
+	direct_block block;
+	int written = write_to_direct_block(buf_ptr, &block);
+
+	uuid_generate(block.id);
+	uuid_copy(*id, block.id);
+
+	store_to_db(block.id, &block, sizeof(direct_block));
+	return written;
+}
+
 static int myfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     write_log("myfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n", path, buf, size, offset, fi);
-
-    // return -ENOENT;
 
     my_inode* inode = get_inode(path, 0);
 
@@ -510,41 +685,144 @@ static int myfs_write(const char *path, const char *buf, size_t size, off_t offs
     {
     	return -ENOENT;
     }
-    else 
+    else if (size > MY_MAX_FILE_SIZE)
     {
-    	uint8_t data_block[MY_MAX_FILE_SIZE];
+    	return -EFBIG;
+    }
+    else
+    {
 
-    	memset(&data_block, 0, MY_MAX_FILE_SIZE);
+    	char** buf_ptr = &buf;
+    	int written = 0;
 
-    	uuid_t data_id;
-    	uuid_copy(data_id, inode->data_id);
-    	if (uuid_compare(zero_uuid, data_id) == 0)
+    	file_data_fcb data;
+
+    	//only direct data block needed
+    	if (size <= MY_MAX_DATA_SIZE * MY_MAX_DIRECT_BLOCKS)
     	{
-    		uuid_generate(data_id);
+    		written = write_to_block(buf_ptr, &(data.direct_data_id));
     	}
-    	else
+
+    	//indirect indexing needed
+    	else 
     	{
-    		fetch_from_db(data_id, &data_block, MY_MAX_FILE_SIZE);
+    		//write to direct block
+    		written += write_to_block(buf_ptr, &data.direct_data_id);
+
+    		//write to indirect block;
+    		int i = 0;
+    		while(strlen(*buf_ptr) > 0 && i < MY_MAX_DIRECT_BLOCKS)
+    		{
+    			written += write_to_block(buf_ptr, &(data.index_ids[i]));
+    			i++;
+    		}
+
     	}
 
-    	int written = snprintf(data_block, MY_MAX_FILE_SIZE, buf);
+    	// char** buf_ptr = &buf;
+    	// int written = 0;
 
-    	//write data back to db
-    	store_to_db(data_id, &data_block, MY_MAX_FILE_SIZE);
+    	// file_data_fcb data;
+
+    	// written = write_to_direct_block(buf_ptr, &block);
+    	// write_log("finished writing to blocks %s \n", *buf_ptr);
+
+
+    	// time_t now = time(NULL);
+
+    	// inode->size = written;
+     //   	inode->mtime = now;
+    	// inode->ctime = now;
+
+    	// store_to_db(block.id, &block, sizeof(direct_block));
+    	// store_to_db(inode->id, inode, sizeof(my_inode));
+
+    	uuid_generate(data.id);
+    	uuid_copy(inode->data_id, data.id);
+
+    	//store file data fcb
+    	store_to_db(data.id, &data, sizeof(file_data_fcb));
 
     	time_t now = time(0);
 
-    	uuid_copy(inode->data_id, data_id);
-    	inode->size = written;
-    	inode->mtime = now;
-    	inode->ctime = now;
+	    inode->size = written;
+	    inode->mtime = now;
+	    inode->ctime = now;
+
+	    //store file inode
+	    store_to_db(inode->id, inode, sizeof(my_inode));
 
 
-    	//write inode back to db
-    	store_to_db(inode->id, inode, sizeof(my_inode));
+    	write_log("finished storing to db %d\n", written);
 
-    	return written;
-    }
+	    return written;
+
+	}
+    
+
+    	// for (int i = 0; i<MY_MAX_DIRECT_BLOCKS; i++)
+    	// {
+    	// 	uint8_t data[MY_MAX_DATA_SIZE];
+    	// 	memset(&data, 0, MY_MAX_DATA_SIZE);
+
+    	// 	uuid_t data_id;
+
+    	// 	//do the check
+
+    	// 	uuid_generate(data_id);
+
+    	// 	int wrote = snprintf(data, MY_MAX_DATA_SIZE, buf_ptr);
+    	// 	if (strlen(buf_ptr) < MY_MAX_DATA_SIZE)
+    	// 	{
+    	// 		break;
+    	// 	}
+    	// 	buf_ptr += MY_MAX_DATA_SIZE;
+
+
+    	// }
+
+
+
+
+
+
+    	//data block
+    	// uint8_t data_block[MY_MAX_FILE_SIZE];
+
+    	// memset(&data_block, 0, MY_MAX_FILE_SIZE);
+
+    	// uuid_t data_id;
+    	// uuid_copy(data_id, inode->data_id);
+
+    	// //check if already has data block
+    	// if (uuid_compare(zero_uuid, data_id) == 0)
+    	// {
+    	// 	uuid_generate(data_id);
+    	// }
+    	// else
+    	// {
+    	// 	fetch_from_db(data_id, &data_block, MY_MAX_FILE_SIZE);
+    	// }
+
+    	// //write to data block
+    	// int written = snprintf(data_block, MY_MAX_FILE_SIZE, buf);
+
+    	// //write data back to db
+    	// store_to_db(data_id, &data_block, MY_MAX_FILE_SIZE);
+
+    	// time_t now = time(0);
+
+    	// uuid_copy(inode->data_id, data_id);
+    	// inode->size = written;
+    	// inode->mtime = now;
+    	// inode->ctime = now;
+
+
+    	// //write inode back to db
+    	// store_to_db(inode->id, inode, sizeof(my_inode));
+
+    	// return written;
+
 
 	// if(strcmp(path, the_root_fcb.path) != 0)
 	// {
@@ -621,6 +899,31 @@ int myfs_truncate(const char *path, off_t newsize)
 
     return -ENOENT;
 
+    if (newsize >= MY_MAX_FILE_SIZE)
+    {
+    	write_log("myfs_truncate - EFBIG");
+    	return -EFBIG;
+    }
+
+    my_inode* inode = get_inode(path, 0);
+
+    size_t size = inode->size;
+
+    if (size > newsize)
+    {
+
+    }
+    else if (size < newsize)
+    {
+
+    }
+
+
+
+    inode->size = newsize;
+
+    return 0;
+
 	// if(newsize >= MY_MAX_FILE_SIZE)
 	// {
 	// 	write_log("myfs_truncate - EFBIG");
@@ -645,6 +948,16 @@ int myfs_truncate(const char *path, off_t newsize)
 int myfs_chmod(const char *path, mode_t mode)
 {
     write_log("myfs_chmod(fpath=\"%s\", mode=0%03o)\n", path, mode);
+
+    my_inode* inode = get_inode(path, 0);
+    if (inode == NULL)
+    {
+    	write_log("myfs_chmod - ENOENT");
+    	return -ENOENT;
+    }
+    inode->mode |= mode;
+
+    store_to_db(inode->id, &inode, sizeof(my_inode));
 
     return 0;
 }
@@ -767,6 +1080,7 @@ static int myfs_open(const char *path, struct fuse_file_info *fi)
 	return 0;
 }
 
+
 static struct fuse_operations myfs_oper = 
 {
 	.getattr	= myfs_getattr,
@@ -860,9 +1174,9 @@ void init_fs()
 		rc = unqlite_kv_store(pDb, root_object.id, KEY_SIZE, &the_root_fcb, sizeof(my_inode));
 		error_handle(rc);
 
-		unqlite_kv_fetch(pDb, root_object.id, KEY_SIZE, NULL, &bytes);
+		// unqlite_kv_fetch(pDb, root_object.id, KEY_SIZE, NULL, &bytes);
 
-		printf("wrote root fcb of size %d\n", bytes);
+		// printf("wrote root fcb of size %d\n", bytes);
 
 		printf("init_fs: writing updated root object\n");
 		//Store root object

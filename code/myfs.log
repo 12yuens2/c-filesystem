@@ -1,61 +1,84 @@
-myfs_getattr(path="/", statbuf=0xb9edbbe0)
-myfs_getattr(path="/.Trash", statbuf=0xb9edbc10)
+myfs_getattr(path="/.Trash", statbuf=0x29115c10)
 get_inode for path '/.Trash'
+looping
+looping
 not found in fs
-myfs_getattr(path="/.Trash-18238", statbuf=0xb96dac10)
+myfs_getattr(path="/.Trash-18238", statbuf=0x29916c10)
 get_inode for path '/.Trash-18238'
+looping
+looping
 not found in fs
-myfs_getattr(path="/.Trash", statbuf=0xb9edbc10)
+myfs_getattr(path="/.Trash", statbuf=0x29115c10)
 get_inode for path '/.Trash'
+looping
+looping
 not found in fs
-myfs_getattr(path="/.Trash-18238", statbuf=0xb96dac10)
+myfs_getattr(path="/.Trash-18238", statbuf=0x29916c10)
 get_inode for path '/.Trash-18238'
+looping
+looping
 not found in fs
-myfs_getattr(path="/", statbuf=0xb9edbbe0)
-myfs_getattr(path="/a", statbuf=0xb96dac10)
-get_inode for path '/a'
+myfs_getattr(path="/", statbuf=0x29115be0)
+myfs_getattr(path="/c", statbuf=0x29916c10)
+get_inode for path '/c'
+looping
+looping
 not found in fs
-myfs_create(path="/a", mode=0100644, fi=0xb9edbcc0)
-get_inode for path '/a'
-making new inode a
-myfs_getattr(path="/a", statbuf=0xb9edbbd0)
-get_inode for path '/a'
+myfs_create(path="/c", mode=0100644, fi=0x29115cc0)
+get_inode for path '/c'
+looping
+making new inode c
+myfs_getattr(path="/c", statbuf=0x29115bd0)
+get_inode for path '/c'
+looping
+looping
 FOUND
-myfs_write(path="/a", buf=0xbafdd060, size=12, offset=0, fi=0xb96dad30)
-get_inode for path '/a'
+myfs_write(path="/c", buf=0x2aa44060, size=25, offset=0, fi=0x29916d30)
+get_inode for path '/c'
+looping
+looping
 FOUND
-myfs_open(path"/a", fi=0xb96dacc0)
-myfs_getattr(path="/a", statbuf=0xb9edbbe0)
-get_inode for path '/a'
+buffer: 123567812345678123456784
+ , check: 1235
+buffer: 67812345678123456784
+ , check: 6781
+buffer: 2345678123456784
+ , check: 2345
+buffer: 678123456784
+ , check: 6781
+buffer: 23456784
+ , check: 2345	
+buffer: 6784
+ , check: 6784
+buffer: 
+ , check: 
+
+finished storing to db 25
+myfs_getattr(path="/c", statbuf=0x29916c10)
+get_inode for path '/c'
+looping
+looping
 FOUND
-myfs_read(path="/a", buf=0xac000ce0, size=4096, offset=0, fi=0xb96dacc0)
-get_inode for path '/a'
+myfs_open(path"/c", fi=0x29115cc0)
+myfs_read(path="/c", buf=0x24001040, size=4096, offset=0, fi=0x29916cc0)
+get_inode for path '/c'
+looping
+looping
 FOUND
-myfs_getattr(path="/a", statbuf=0xb9edbbe0)
-get_inode for path '/a'
-FOUND
-myfs_getattr(path="/", statbuf=0xb96dabe0)
-write_readdir(path="/", buf=0xb4000b00, filler=0xba9d0c00, offset=0, fi=0xb9edbc00)
-get_inode for path '/'
-end read.
-myfs_getattr(path="/a", statbuf=0xb96dac10)
-get_inode for path '/a'
-FOUND
-myfs_getattr(path="/b", statbuf=0xb9edbc10)
-get_inode for path '/b'
-not found in fs
-myfs_mkdir: /b
-fname; b
-made dir/b
-get_inode for path '/b'
-making new inode b
-myfs_getattr(path="/b", statbuf=0xb96dac10)
-get_inode for path '/b'
-FOUND
-myfs_getattr(path="/", statbuf=0xb96dabe0)
-write_readdir(path="/", buf=0xb4000b00, filler=0xba9d0c00, offset=0, fi=0xb9edbc00)
-get_inode for path '/'
-end read.
-myfs_getattr(path="/a", statbuf=0xb96dac10)
-get_inode for path '/a'
+wrote to buf: 1235 with size : 4
+wrote to buf: 6781 with size : 4
+wrote to buf: 2345 with size : 4
+wrote to buf: 6781 with size : 4
+wrote to buf: 2345 with size : 4
+wrote to buf: 6784 with size : 4
+wrote to buf: 
+784 with size : 4
+not found in db
+wrote to buf: 
+784 with size : 4
+finished direct block, 4064 left
+myfs_getattr(path="/c", statbuf=0x29115be0)
+get_inode for path '/c'
+looping
+looping
 FOUND
