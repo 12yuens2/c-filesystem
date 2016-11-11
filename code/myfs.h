@@ -50,16 +50,12 @@ typedef struct my_inode
 	//data block if file, dir_data_fcb if directory
 	uuid_t data_id;
 
-	// uuid_t direct_block;
-	// uuid_t indirect_block;
-
 	uid_t uid;
 	gid_t gid;
 	mode_t mode;
 	time_t mtime;	
 	time_t ctime;
 	off_t size;
-
 
 } my_inode;
 

@@ -356,7 +356,7 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset, str
 	else 
 	{
 		len = inode->size;
-		int read = size;
+		int read = len;
 
 		char** read_buf = &buf;
 
@@ -369,6 +369,25 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset, str
 			if (offset > MY_DATA_SIZE_PER_BLOCK)
 			{
 				//start from indirect blocks
+				int index_offset = (offset / MY_DATA_SIZE_PER_BLOCK);
+
+				//change offset to start at the current indirect block
+				offset = offset - (index_offset * MY_DATA_SIZE_PER_BLOCK);
+
+				int block_index = offset / MY_MAX_DATA_SIZE;
+				int data_index = offset % MY_MAX_DATA_SIZE;
+
+				//read first indirect block with offsets
+				read -= read_direct_block(data_fcb.index_ids[index_offset - 1], read_buf, block_index, data_index, size);
+
+				//read rest of indirect blocks without offsets
+				int i = index_offset;
+				while (read > 0 && i < MY_MAX_DIRECT_BLOCKS)
+				{
+					read -= read_direct_block(data_fcb.index_ids[i], read_buf, 0, 0, len - read);
+					i++;
+				}
+
 			}
 			else 
 			{
@@ -379,14 +398,13 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset, str
 				//read direct block
 				read -= read_direct_block(data_fcb.direct_data_id, read_buf, block_index, data_index, size);
 
-				write_log("finished direct block, %d left\n", read);
-
-				//read indirect blocks
-				// int i = 0;
-				// while (read > 0 && i < MY_MAX_DIRECT_BLOCKS)
-				// {
-				// 	read -= read_direct_block(data_fcb.index_ids[i], buf, 0, 0, size - read);
-				// }
+				// read indirect blocks
+				int i = 0;
+				while (read > 0 && i < MY_MAX_DIRECT_BLOCKS)
+				{
+					read -= read_direct_block(data_fcb.index_ids[i], read_buf, 0, 0, len - read);
+					i++;
+				}
 
 			}
 		}
@@ -601,7 +619,6 @@ static int myfs_utime(const char *path, struct utimbuf *ubuf)
 
 // Write to a file.
 // Read 'man 2 write'
-
 //assume buf_ptr passed here is <= MY_MAX_DATA_SIZE * MY_MAX_DIRECT_BLOCKS
 int write_to_direct_block(char** buf_ptr, direct_block* block_buf)
 {
@@ -619,8 +636,6 @@ int write_to_direct_block(char** buf_ptr, direct_block* block_buf)
 
 		uuid_generate(block.id);
 
-		
-
 		int wrote = snprintf(data, MY_MAX_DATA_SIZE+1, *buf_ptr);
 
 		write_log("buffer: %s , check: %s\n", *buf_ptr, data);
@@ -631,9 +646,6 @@ int write_to_direct_block(char** buf_ptr, direct_block* block_buf)
 			written += MY_MAX_DATA_SIZE;
 			memcpy(&(block.data), &data, MY_MAX_DATA_SIZE);
 			block.size = MY_MAX_DATA_SIZE;
-
-			// char* check = malloc(4);
-			// memcpy(&check, &data, MY_MAX_DATA_SIZE);
 
 			//move data pointer along to next bytes
 			*buf_ptr += MY_MAX_DATA_SIZE;
@@ -897,31 +909,42 @@ int myfs_truncate(const char *path, off_t newsize)
 {
     write_log("myfs_truncate(path=\"%s\", newsize=%lld)\n", path, newsize);
 
-    return -ENOENT;
+    // return -ENOENT;
 
     if (newsize >= MY_MAX_FILE_SIZE)
     {
-    	write_log("myfs_truncate - EFBIG");
+    	write_log("myfs_truncate - EFBIG\n");
     	return -EFBIG;
     }
 
     my_inode* inode = get_inode(path, 0);
-
-    size_t size = inode->size;
-
-    if (size > newsize)
+    if (inode == NULL)
     {
-
-    }
-    else if (size < newsize)
-    {
-
+    	write_log("truncate inode not found\n");
+    	return -ENOENT;
     }
 
+    // size_t size = inode->size;
+
+    // if (size > newsize)
+    // {
+    // 	file_data_fcb file_fcb;
+    // 	fetch_from_db(inode->data_id, &file_fcb, sizeof(file_data_fcb));
+
+
+    // }
+    // else if (size < newsize)
+    // {
+    // 	inode->size = newsize;
+    // 	store_to_db(inode->id, inode, sizeof(my_inode));
+    // }
+    write_log("turnate befeore\n");
 
 
     inode->size = newsize;
+    store_to_db(inode->id, inode, sizeof(my_inode));
 
+    write_log("truncate return\n");
     return 0;
 
 	// if(newsize >= MY_MAX_FILE_SIZE)
@@ -955,9 +978,9 @@ int myfs_chmod(const char *path, mode_t mode)
     	write_log("myfs_chmod - ENOENT");
     	return -ENOENT;
     }
-    inode->mode |= mode;
 
-    store_to_db(inode->id, &inode, sizeof(my_inode));
+    inode->mode = mode;
+    store_to_db(inode->id, inode, sizeof(my_inode));
 
     return 0;
 }
@@ -967,6 +990,18 @@ int myfs_chmod(const char *path, mode_t mode)
 int myfs_chown(const char *path, uid_t uid, gid_t gid)
 {
     write_log("myfs_chown(path=\"%s\", uid=%d, gid=%d)\n", path, uid, gid);
+
+    my_inode* inode = get_inode(path, 0);
+    if (inode == NULL)
+    {
+    	write_log("myfs_chown - ENOENT");
+    	return -ENOENT;
+    }
+
+    inode->uid = uid;
+    inode->gid = gid;
+
+    store_to_db(inode->id, inode, sizeof(my_inode));
 
     return 0;
 }
@@ -1027,21 +1062,85 @@ int myfs_mkdir(const char *path, mode_t mode)
 
 // Delete a file.
 // Read 'man 2 unlink'.
-// int myfs_unlink(const char *path)
-// {
-// 	write_log("myfs_unlink: %s\n",path);
+int myfs_unlink(const char *path)
+{
+	write_log("myfs_unlink: %s\n",path);
 
-//     return 0;
-// }
+	char* file_name = get_file_name(path);
+	my_inode* parent = get_inode(path, 1);
 
-// // Delete a directory.
-// // Read 'man 2 rmdir'.
-// int myfs_rmdir(const char *path)
-// {
-//     write_log("myfs_rmdir: %s\n",path);
+	dir_data_fcb parent_fcb;
+	fetch_from_db(parent->data_id, &parent_fcb, sizeof(dir_data_fcb));
 
-//     return 0;
-// }
+	int found = 0;
+	for (int i = 0; i<MY_MAX_DIR_FILES; i++)
+	{
+		dir_entry* entry = &parent_fcb.entries[i];
+
+		if (strcmp(entry->filename, file_name) == 0)
+		{
+			found = 1;
+
+			//memset to remove from parent's inode
+			memset(&entry->inode_id, 0, sizeof(uuid_t));
+			memset(&entry->filename, 0, MY_MAX_FILE_NAME);
+			break;
+		}
+	}
+
+	if (found)
+	{
+		store_to_db(parent->data_id, &parent_fcb, sizeof(dir_data_fcb));
+		return 0;
+	}
+	else 
+	{
+		return -ENOENT;
+	}
+}
+
+
+// Delete a directory.
+// Read 'man 2 rmdir'.
+int myfs_rmdir(const char *path)
+{
+    write_log("myfs_rmdir: %s\n",path);
+
+    my_inode* inode = get_inode(path, 0);
+
+    if (inode == NULL)
+    {
+    	return -ENOENT;
+    }
+    else 
+    {
+    	dir_data_fcb dir_fcb;
+    	fetch_from_db(inode->data_id, &dir_fcb, sizeof(dir_data_fcb));
+
+    	int empty = 1;
+    	for (int i = 0; i < MY_MAX_DIR_FILES; i++)
+    	{
+    		dir_entry entry = dir_fcb.entries[i];
+    		if (strcmp(entry.filename, "") != 0)
+    		{
+    			empty = 0;
+    			break;	
+    		}
+    	}
+
+    	if (empty)
+    	{
+    		return myfs_unlink(path);
+    	}
+    	else 
+    	{
+    		return -ENOTEMPTY;
+    	}
+    }
+
+
+    return 0;
+}
 
 // // OPTIONAL - included as an example
 // // Flush any cached data.
@@ -1071,12 +1170,9 @@ int myfs_mkdir(const char *path, mode_t mode)
 static int myfs_open(const char *path, struct fuse_file_info *fi)
 {
 	// if (strcmp(path, the_root_fcb.path) != 0)
-	
-
 	write_log("myfs_open(path\"%s\", fi=0x%08x)\n", path, fi);
 
 	//return -EACCES if the access is not permitted.
-
 	return 0;
 }
 
@@ -1094,8 +1190,8 @@ static struct fuse_operations myfs_oper =
 	.mkdir 		= myfs_mkdir,
 	// .flush		= myfs_flush,
 	// .release	= myfs_release,
-	// .rmdir 		= myfs_rmdir,
-	// .unlink 	= myfs_unlink,
+	.rmdir 		= myfs_rmdir,
+	.unlink 	= myfs_unlink,
 	.chown 		= myfs_chown,
 	.chmod 		= myfs_chmod,
 };
