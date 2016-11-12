@@ -15,12 +15,12 @@
 #define FLOOR(x,y) ((x > y) ? y : x)
 
 
-/* Inode struct */
+//treat files and directories as the same thing (an inode)
 typedef struct my_inode
 {
 	uuid_t id;
 
-	//file_fcb if file, dir_fcb if directory
+	//data block if file, dir_data_fcb if directory
 	uuid_t data_id;
 
 	uid_t uid;
@@ -32,10 +32,6 @@ typedef struct my_inode
 
 } my_inode;
 
-
-/**
- * File data structs 
- */
 typedef struct data_block
 {
 	uuid_t id;
@@ -67,9 +63,9 @@ typedef struct file_data_fcb
 
 
 
-/**
- * Directory structs
- */
+
+
+
 typedef struct dir_entry 
 {
 	uuid_t inode_id;
@@ -81,7 +77,7 @@ typedef struct dir_data_fcb
 {
 	//own id
 	uuid_t id;
-	dir_entry entries[];
+	dir_entry entries[MY_MAX_DIR_FILES];
 
 } dir_data_fcb;
 
