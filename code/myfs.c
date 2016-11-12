@@ -126,13 +126,14 @@ int get_inode(const char* path, my_inode* inode, int get_parent)
 
 			if (rc < 0)
 			{
-				// write_log("not found in db\n");
+				write_log("not found in db\n");
 				return -ENOENT;
 			}
 
 			//loop through current inode
 			int found = 0;
-			for (int i = 0; i<MY_MAX_DIR_FILES; i++)
+			write_log("inode %s, size: %d\n", get_uuid(inode->id), inode->size);
+			for (int i = 0; i<inode->size; i++)
 			{
 				dir_entry entry = dir_fcb.entries[i];
 				if (strcmp(entry.filename, partial_path) == 0)
@@ -156,14 +157,21 @@ int get_inode(const char* path, my_inode* inode, int get_parent)
 	return 0;
 }
 
-void update_parent(my_inode* parent_fcb, uuid_t new_inode_id, const char* path)
+
+
+//NEED TO UPDATE PARENT'S MTIME
+void update_parent(my_inode* parent_inode, uuid_t new_inode_id, const char* path)
 {
 	dir_data_fcb parent_data;
 
-	fetch_from_db(parent_fcb->data_id, &parent_data, sizeof(dir_data_fcb));
+	fetch_from_db(parent_inode->data_id, &parent_data, sizeof(dir_data_fcb));
+
+	// int index = parent_inode->size;
+	parent_inode->size = parent_inode->size + 1;
+	parent_data.entries = realloc(parent_data.entries, parent_inode->size * sizeof(dir_entry));
 
 	//add to parent
-	for (int i = 0; i<MY_MAX_DIR_FILES; i++) 
+	for (int i = 0; i<parent_inode->size; i++) 
 	{
 		dir_entry entry = parent_data.entries[i];
 
@@ -180,7 +188,15 @@ void update_parent(my_inode* parent_fcb, uuid_t new_inode_id, const char* path)
 		}
 	}
 
-	store_to_db(parent_fcb->data_id, &parent_data, sizeof(dir_data_fcb));
+	write_log("udpated inode %s to size %d\n", get_uuid(parent_inode->id), parent_inode->size);
+	if (uuid_compare(parent_inode->id, root_object.id) == 0)
+	{
+		//update the cached root as well
+		the_root_fcb = *parent_inode;
+	}
+
+	store_to_db(parent_inode->id, parent_inode, sizeof(my_inode));
+	store_to_db(parent_inode->data_id, &parent_data, sizeof(dir_data_fcb));
 }
 
 
@@ -281,7 +297,7 @@ static int myfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
 
 	fetch_from_db(inode.data_id, &dir_data, sizeof(dir_data_fcb));
 
-	for (int i = 0; i<MY_MAX_DIR_FILES; i++)
+	for (int i = 0; i<inode.size; i++)
 	{
 		char* filename = dir_data.entries[i].filename;
 		// write_log("filename: %s\n", filename);
@@ -744,7 +760,7 @@ int myfs_mkdir(const char *path, mode_t mode)
 
 	uuid_generate(new_inode.id);
 
-	new_inode.mode = mode | S_IFDIR;//S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH;;
+	new_inode.mode = mode | S_IFDIR;
 	new_inode.uid = getuid();
 	new_inode.gid = getgid();
 	new_inode.mtime = time(NULL);
@@ -752,6 +768,7 @@ int myfs_mkdir(const char *path, mode_t mode)
 	//make directory data fcb
 	dir_data_fcb dir_data;
 	memset(&dir_data, 0, sizeof(dir_data_fcb));
+
 	uuid_generate(dir_data.id);
 	
 	uuid_copy(new_inode.data_id, dir_data.id);
@@ -800,7 +817,7 @@ int myfs_unlink(const char *path)
 	fetch_from_db(parent.data_id, &parent_fcb, sizeof(dir_data_fcb));
 
 	int found = 0;
-	for (int i = 0; i<MY_MAX_DIR_FILES; i++)
+	for (int i = 0; i<parent.size; i++)
 	{
 		dir_entry* entry = &parent_fcb.entries[i];
 
@@ -846,7 +863,7 @@ int myfs_rmdir(const char *path)
     	fetch_from_db(inode.data_id, &dir_fcb, sizeof(dir_data_fcb));
 
     	int empty = 1;
-    	for (int i = 0; i < MY_MAX_DIR_FILES; i++)
+    	for (int i = 0; i < inode.size; i++)
     	{
     		dir_entry entry = dir_fcb.entries[i];
     		if (strcmp(entry.filename, "") != 0)
@@ -960,32 +977,31 @@ void init_fs()
 
 		//See 'man 2 stat' and 'man 2 chmod'.
 
-		//mkdir the root directory
-		// myfs_mkdir("/", S_IFDIR|S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
-
 		the_root_fcb.mode |= S_IFDIR|S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH;
 		time_t now = time(NULL);
 		the_root_fcb.mtime = now;
 		the_root_fcb.ctime = now;
 		the_root_fcb.uid = getuid();
 		the_root_fcb.gid = getgid();
+		the_root_fcb.size = 0;
+
 
 		//create directory data of root
 		dir_data_fcb root_data;
-		// memset(&root_data, 0, sizeof(dir_data_fcb));
+		memset(&root_data, 0, sizeof(dir_data_fcb));
 
 		uuid_generate(root_data.id);
 
-		for (int i = 0; i<MY_MAX_DIR_FILES; i++) 
-		{
-			memset(&root_data.entries[i], 0, sizeof(dir_entry));
-		}
+		// for (int i = 0; i<MY_MAX_DIR_FILES; i++) 
+		// {
+		// 	memset(&root_data.entries[i], 0, sizeof(dir_entry));
+		// }
 
 		uuid_copy(the_root_fcb.data_id, root_data.id);
 
 		//write root data to db
 		store_to_db(root_data.id, &root_data, sizeof(dir_data_fcb));
-		
+
 		// rc = unqlite_kv_store(pDb, root_data.id, KEY_SIZE, &root_data, sizeof(dir_data_fcb));
 		// error_handle(rc);
 
@@ -996,6 +1012,7 @@ void init_fs()
 
 		//Generate a key for the_root_fcb and update the root object.
 		uuid_generate(root_object.id);
+		uuid_copy(the_root_fcb.id, root_object.id);
 
 		printf("init_fs: writing root fcb\n");
 		//write root fcb to db
@@ -1003,6 +1020,7 @@ void init_fs()
 		error_handle(rc);
 
 		printf("init_fs: writing updated root object\n");
+
 		//Store root object
 		rc = write_root();
 	 	error_handle(rc);

@@ -81,7 +81,9 @@ typedef struct dir_data_fcb
 {
 	//own id
 	uuid_t id;
-	dir_entry entries[];
+
+	//array of dir_entries
+	dir_entry* entries;
 
 } dir_data_fcb;
 
