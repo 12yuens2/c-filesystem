@@ -27,13 +27,14 @@ typedef struct my_inode
 	gid_t gid;
 	mode_t mode;
 	time_t mtime;	
+	time_t atime;
 	time_t ctime;
 	off_t size;
 
 } my_inode;
 
 
-/**
+/*
  * File data structs 
  */
 typedef struct data_block
@@ -67,7 +68,7 @@ typedef struct file_data_fcb
 
 
 
-/**
+/*
  * Directory structs
  */
 typedef struct dir_entry 

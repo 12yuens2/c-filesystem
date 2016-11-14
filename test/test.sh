@@ -12,7 +12,7 @@ rmdir mnttesting
 fi
 if [ ! -d mnttesting ]; then
 mkdir mnttesting
-#${EXECFS} ./mnttesting
+${EXECFS} ./mnttesting
 echo "--create an empty file--"
 touch mnttesting/test.txt
 ls -la mnttesting
@@ -20,8 +20,8 @@ echo "--stat--"
 stat mnttesting/test.txt
 sleep 3
 echo "--remount the file system--"
-#fusermount -u mnttesting
-#${EXECFS} ./mnttesting
+fusermount -u mnttesting
+${EXECFS} ./mnttesting
 ls -la mnttesting
 echo "--chmod--"
 chmod 660 mnttesting/test.txt
@@ -64,7 +64,7 @@ mkdir -p mnttesting/test/test/test/toast/boast/boat
 ls -lR mnttesting
 tree mnttesting
 echo "===END - Testing $1==="
-#fusermount -u mnttesting
+fusermount -u mnttesting
 rm -f myfs.db myfs.log
 else
 echo "mount point already exists:"
