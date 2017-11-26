@@ -2,15 +2,16 @@
 
 #define MY_MAX_PATH 100
 
-// #define MY_MAX_FILE_SIZE 1000
 #define MY_MAX_DIR_FILES 32
 #define MY_MAX_FILE_NAME 255
 
+//Data sizes defined to be small for easier testing
 #define MY_MAX_DATA_SIZE 4
 #define MY_MAX_DIRECT_BLOCKS 8
 
 #define MY_DATA_SIZE_PER_BLOCK MY_MAX_DATA_SIZE * MY_MAX_DIRECT_BLOCKS
 #define MY_MAX_FILE_SIZE MY_MAX_DIRECT_BLOCKS * MY_DATA_SIZE_PER_BLOCK
+
 
 #define FLOOR(x,y) ((x > y) ? y : x)
 
@@ -84,8 +85,6 @@ typedef struct dir_data_fcb
 	uuid_t id;
 
 	//array of dir_entries
-	dir_entry* entries;
+	dir_entry entries[MY_MAX_DIR_FILES];
 
 } dir_data_fcb;
-
-

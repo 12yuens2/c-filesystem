@@ -25,7 +25,7 @@ int main(int argc, char** argv){
 		}
 
 
-		lseek(fd2, 30, SEEK_SET);
+		lseek(fd2, 15, SEEK_SET);
 
 		// char* buf = malloc(100);
 		// int rd = read(fd2, buf, 100);

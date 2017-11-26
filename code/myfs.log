@@ -1,7 +1,0 @@
-
-[SYST] getattr: (path="/", statbuf=0xe4fbfbe0)
-[FUNC] get_inode: path='/' get_parent='0'
-
-[SYST] readdir: (path="/", buf=0xe0000b00, filler=0xe62b5c00, offset=0, fi=0xe4fbfc00)
-[FUNC] get_inode: path='/' get_parent='0'
-readdir id: bbf39385-0499-4e4a-9b1b-bcbb2deed097
